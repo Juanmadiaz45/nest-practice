@@ -1,7 +1,5 @@
 # nest-practice
 
------
-
 ### **1. Configuración inicial**
 
 Antes de empezar, necesitas tener Node.js y npm (o yarn) instalados. También, NestJS tiene su propia interfaz de línea de comandos (CLI) que simplifica la creación de proyectos y la generación de componentes.
@@ -371,3 +369,355 @@ npm run start:dev
   * **Productos:**
       * `GET http://localhost:3000/productos`
       * `POST http://localhost:3000/productos`
+
+
+# nest-practice 2
+
+### **1. Configuración del Entorno**
+
+Antes de comenzar, asegúrate de tener Node.js, npm (o yarn) y la CLI de NestJS instalados globalmente.
+
+1.  **Instalar la CLI de NestJS:** Si no la tienes, ejecuta este comando en tu terminal:
+
+    ```bash
+    npm i -g @nestjs/cli
+    ```
+
+-----
+
+### **2. Creación y Configuración del Proyecto**
+
+Crea un nuevo proyecto de NestJS y configúralo para la base de datos. Usaremos **SQLite** para simplificar, ya que no requiere un servidor de base de datos externo.
+
+1.  **Crear el proyecto:** En tu terminal, ejecuta:
+
+    ```bash
+    nest new nest-tareas
+    ```
+
+    Elige `npm` como gestor de paquetes.
+
+2.  **Instalar dependencias:** Navega a la carpeta del proyecto e instala TypeORM y el driver de SQLite.
+
+    ```bash
+    cd nest-tareas
+    npm install @nestjs/typeorm typeorm sqlite3
+    ```
+
+3.  **Configurar la base de datos:** Abre `src/app.module.ts` y configura la conexión a la base de datos.
+
+    ```typescript
+    // src/app.module.ts
+    import { Module } from '@nestjs/common';
+    import { TypeOrmModule } from '@nestjs/typeorm';
+    import { AppController } from './app.controller';
+    import { AppService } from './app.service';
+
+    @Module({
+      imports: [
+        TypeOrmModule.forRoot({
+          type: 'sqlite',
+          database: 'db.sqlite', // Nombre del archivo de la base de datos
+          entities: [__dirname + '/**/*.entity{.ts,.js}'],
+          synchronize: true, // Sincroniza el esquema de la base de datos (solo para desarrollo)
+        }),
+      ],
+      controllers: [AppController],
+      providers: [AppService],
+    })
+    export class AppModule {}
+    ```
+
+-----
+
+### **3. Creación de Módulos y Entidades**
+
+Este proyecto tendrá dos módulos principales: `Tareas` y `Usuarios`, para gestionar quién crea cada tarea.
+
+1.  **Generar el módulo de Usuarios:**
+
+    ```bash
+    nest generate module usuarios
+    ```
+
+2.  **Crear la entidad de Usuario:** En `src/usuarios/`, crea un archivo `usuario.entity.ts`.
+
+    ```typescript
+    // src/usuarios/usuario.entity.ts
+    import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+    import { Tarea } from '../tareas/tarea.entity';
+
+    @Entity()
+    export class Usuario {
+      @PrimaryGeneratedColumn()
+      id: number;
+
+      @Column()
+      nombre: string;
+
+      @Column({ unique: true })
+      email: string;
+
+      @OneToMany(() => Tarea, (tarea) => tarea.usuario)
+      tareas: Tarea[];
+    }
+    ```
+
+3.  **Generar el módulo de Tareas:**
+
+    ```bash
+    nest generate module tareas
+    ```
+
+4.  **Crear la entidad de Tarea:** En `src/tareas/`, crea `tarea.entity.ts`.
+
+    ```typescript
+    // src/tareas/tarea.entity.ts
+    import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
+    import { Usuario } from '../usuarios/usuario.entity';
+
+    @Entity()
+    export class Tarea {
+      @PrimaryGeneratedColumn()
+      id: number;
+
+      @Column()
+      titulo: string;
+
+      @Column()
+      descripcion: string;
+
+      @Column({ default: 'pendiente' })
+      estado: string;
+
+      @ManyToOne(() => Usuario, (usuario) => usuario.tareas)
+      usuario: Usuario;
+    }
+    ```
+
+-----
+
+### **4. Conexión de Módulos y Entidades**
+
+Ahora, conecta las entidades con sus módulos y enlaza los módulos en el módulo principal.
+
+1.  **Configurar el Módulo de Usuarios:** En `src/usuarios/usuarios.module.ts`, importa `TypeOrmModule` para `Usuario`.
+
+    ```typescript
+    // src/usuarios/usuarios.module.ts
+    import { Module } from '@nestjs/common';
+    import { TypeOrmModule } from '@nestjs/typeorm';
+    import { UsuariosController } from './usuarios.controller';
+    import { UsuariosService } from './usuarios.service';
+    import { Usuario } from './usuario.entity';
+
+    @Module({
+      imports: [TypeOrmModule.forFeature([Usuario])],
+      controllers: [UsuariosController],
+      providers: [UsuariosService],
+      exports: [UsuariosService], // Exportamos el servicio para usarlo en otros módulos
+    })
+    export class UsuariosModule {}
+    ```
+
+2.  **Configurar el Módulo de Tareas:** En `src/tareas/tareas.module.ts`, haz lo mismo para `Tarea`.
+
+    ```typescript
+    // src/tareas/tareas.module.ts
+    import { Module } from '@nestjs/common';
+    import { TypeOrmModule } from '@nestjs/typeorm';
+    import { TareasController } from './tareas.controller';
+    import { TareasService } from './tareas.service';
+    import { Tarea } from './tarea.entity';
+    import { UsuariosModule } from '../usuarios/usuarios.module';
+
+    @Module({
+      imports: [TypeOrmModule.forFeature([Tarea]), UsuariosModule],
+      controllers: [TareasController],
+      providers: [TareasService],
+    })
+    export class TareasModule {}
+    ```
+
+3.  **Importar los módulos en `app.module.ts`:** Asegúrate de que los módulos de `Usuarios` y `Tareas` estén importados en el módulo raíz.
+
+    ```typescript
+    // src/app.module.ts
+    import { Module } from '@nestjs/common';
+    import { TypeOrmModule } from '@nestjs/typeorm';
+    import { AppController } from './app.controller';
+    import { AppService } from './app.service';
+    import { UsuariosModule } from './usuarios/usuarios.module';
+    import { TareasModule } from './tareas/tareas.module';
+    import { Usuario } from './usuarios/usuario.entity';
+    import { Tarea } from './tareas/tarea.entity';
+
+    @Module({
+      imports: [
+        TypeOrmModule.forRoot({
+          type: 'sqlite',
+          database: 'db.sqlite',
+          entities: [Usuario, Tarea],
+          synchronize: true,
+        }),
+        UsuariosModule,
+        TareasModule,
+      ],
+      controllers: [AppController],
+      providers: [AppService],
+    })
+    export class AppModule {}
+    ```
+
+-----
+
+### **5. Lógica de Servicios y Controladores**
+
+Genera y codifica la lógica CRUD para ambos módulos.
+
+1.  **Generar servicios y controladores:**
+
+    ```bash
+    nest generate service usuarios
+    nest generate controller usuarios
+    nest generate service tareas
+    nest generate controller tareas
+    ```
+
+2.  **Codificar el servicio de Usuarios:**
+
+    ```typescript
+    // src/usuarios/usuarios.service.ts
+    import { Injectable } from '@nestjs/common';
+    import { InjectRepository } from '@nestjs/typeorm';
+    import { Repository } from 'typeorm';
+    import { Usuario } from './usuario.entity';
+
+    @Injectable()
+    export class UsuariosService {
+      constructor(
+        @InjectRepository(Usuario)
+        private usuariosRepository: Repository<Usuario>,
+      ) {}
+
+      async crear(usuario: Partial<Usuario>): Promise<Usuario> {
+        const nuevoUsuario = this.usuariosRepository.create(usuario);
+        return this.usuariosRepository.save(nuevoUsuario);
+      }
+
+      async buscarPorId(id: number): Promise<Usuario> {
+        return this.usuariosRepository.findOne({ where: { id } });
+      }
+
+      async buscarTodos(): Promise<Usuario[]> {
+        return this.usuariosRepository.find();
+      }
+    }
+    ```
+
+3.  **Codificar el controlador de Usuarios:**
+
+    ```typescript
+    // src/usuarios/usuarios.controller.ts
+    import { Controller, Post, Body, Get, Param } from '@nestjs/common';
+    import { UsuariosService } from './usuarios.service';
+    import { Usuario } from './usuario.entity';
+
+    @Controller('usuarios')
+    export class UsuariosController {
+      constructor(private readonly usuariosService: UsuariosService) {}
+
+      @Post()
+      async crear(@Body() usuario: Usuario): Promise<Usuario> {
+        return this.usuariosService.crear(usuario);
+      }
+
+      @Get()
+      async buscarTodos(): Promise<Usuario[]> {
+        return this.usuariosService.buscarTodos();
+      }
+
+      @Get(':id')
+      async buscarPorId(@Param('id') id: string): Promise<Usuario> {
+        return this.usuariosService.buscarPorId(+id);
+      }
+    }
+    ```
+
+4.  **Codificar el servicio de Tareas:**
+
+    ```typescript
+    // src/tareas/tareas.service.ts
+    import { Injectable, NotFoundException } from '@nestjs/common';
+    import { InjectRepository } from '@nestjs/typeorm';
+    import { Repository } from 'typeorm';
+    import { Tarea } from './tarea.entity';
+    import { UsuariosService } from '../usuarios/usuarios.service';
+
+    @Injectable()
+    export class TareasService {
+      constructor(
+        @InjectRepository(Tarea)
+        private tareasRepository: Repository<Tarea>,
+        private usuariosService: UsuariosService,
+      ) {}
+
+      async crear(titulo: string, descripcion: string, usuarioId: number): Promise<Tarea> {
+        const usuario = await this.usuariosService.buscarPorId(usuarioId);
+        if (!usuario) {
+          throw new NotFoundException('Usuario no encontrado');
+        }
+        const nuevaTarea = this.tareasRepository.create({ titulo, descripcion, usuario });
+        return this.tareasRepository.save(nuevaTarea);
+      }
+
+      async buscarTodas(): Promise<Tarea[]> {
+        return this.tareasRepository.find({ relations: ['usuario'] });
+      }
+    }
+    ```
+
+5.  **Codificar el controlador de Tareas:**
+
+    ```typescript
+    // src/tareas/tareas.controller.ts
+    import { Controller, Post, Body, Get, Query } from '@nestjs/common';
+    import { TareasService } from './tareas.service';
+    import { Tarea } from './tarea.entity';
+
+    @Controller('tareas')
+    export class TareasController {
+      constructor(private readonly tareasService: TareasService) {}
+
+      @Post()
+      async crear(@Body() { titulo, descripcion, usuarioId }): Promise<Tarea> {
+        return this.tareasService.crear(titulo, descripcion, usuarioId);
+      }
+
+      @Get()
+      async buscarTodas(): Promise<Tarea[]> {
+        return this.tareasService.buscarTodas();
+      }
+    }
+    ```
+
+-----
+
+### **6. Ejecución y Pruebas**
+
+1.  **Iniciar el servidor:** En la terminal, ejecuta:
+
+    ```bash
+    npm run start:dev
+    ```
+
+2.  **Probar la API:** Usa Postman o Insomnia.
+
+      * **Crear un usuario:**
+          * `POST http://localhost:3000/usuarios`
+          * Cuerpo: `{"nombre": "Carlos", "email": "carlos@ejemplo.com"}`
+      * **Crear una tarea para el usuario:**
+          * `POST http://localhost:3000/tareas`
+          * Cuerpo: `{"titulo": "Comprar leche", "descripcion": "Leche deslactosada", "usuarioId": 1}`
+      * **Ver todas las tareas:**
+          * `GET http://localhost:3000/tareas`
